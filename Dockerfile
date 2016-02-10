@@ -9,24 +9,28 @@ COPY conf/cloudera.repo  /etc/yum.repos.d/cloudera.repo
 
 #Add a Repository Key
 RUN rpm --import https://archive.cloudera.com/cdh5/redhat/7/x86_64/cdh/RPM-GPG-KEY-cloudera && \
-    yum update
+    yum -y update
 
 #Install CDH package and dependencies
 RUN yum install -y zookeeper-server && \
     yum install -y hadoop-conf-pseudo && \
     yum install -y oozie && \
-    yum install -y python27 && \
     yum install -y hue && \
-    yum install -y hue-plugins
+    yum install -y hue-plugins && \
+    yum install -y unzip
+
+#Instsall sudo for command simplicity and disable tty requirement
+RUN yum install -y sudo && \
+    sed -i 's/Defaults    requiretty/Defaults    !requiretty/' /etc/sudoers
 
 #Install Spark 1.5
-RUN wget http://mirrors.ocf.berkeley.edu/apache/spark/spark-1.5.1/spark-1.5.1-bin-without-hadoop.tgz && \
+RUN wget --quiet http://mirrors.ocf.berkeley.edu/apache/spark/spark-1.5.1/spark-1.5.1-bin-without-hadoop.tgz && \
     tar xzf spark-1.5.1-bin-without-hadoop.tgz && \
     rm *.tgz && \
     mv spark-1.5.1* /usr/lib/spark && \
+    rm /usr/bin/spark-* && \
     ln -s /usr/lib/spark/bin/spark-shell /usr/bin/spark-shell && \
-    ln -s /usr/lib/spark/bin/spark-submit /usr/bin/spark-bin && \
-    mkdir /etc/spark/conf
+    ln -s /usr/lib/spark/bin/spark-submit /usr/bin/spark-bin
 
 #Copy updated config files
 COPY conf/core-site.xml /etc/hadoop/conf/core-site.xml
@@ -39,13 +43,15 @@ COPY conf/oozie-site.xml /etc/oozie/conf/oozie-site.xml
 COPY conf/spark-defaults.conf /etc/spark/conf/spark-defaults.conf
 COPY conf/hue.ini /etc/hue/conf/hue.ini
 
+RUN find /etc/*/conf -type f -print0 | xargs -0 sed -i 's/\r$//'
+
 #Format HDFS
-RUN su -c 'hdfs namenode -format' - hdfs
+RUN sudo -u hdfs hdfs namenode -format
 
 COPY conf/run-hadoop.sh /usr/bin/run-hadoop.sh
 RUN chmod +x /usr/bin/run-hadoop.sh
 
-RUN su oozie /usr/lib/oozie/bin/ooziedb.sh create -run && \
+RUN sudo -u oozie /usr/lib/oozie/bin/ooziedb.sh create -run && \
     wget http://archive.cloudera.com/gplextras/misc/ext-2.2.zip -O ext.zip && \
     unzip ext.zip -d /var/lib/oozie
 
